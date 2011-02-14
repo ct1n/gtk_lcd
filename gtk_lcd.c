@@ -43,47 +43,56 @@ void gtk_lcd_set_format(GtkLCD *lcd, const gchar *format)
     lcd->format = g_strdup(format);
     lcd->length = strlen(format);
     lcd->value = g_strnfill(lcd->length, ' ');
+    gtk_widget_queue_resize(GTK_WIDGET(lcd));
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
 void gtk_lcd_set_value(GtkLCD *lcd, const gchar *value)
 {
     g_strlcpy(lcd->value, value, lcd->length + 1);
-    gtk_lcd_paint(GTK_WIDGET(lcd));
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
 void gtk_lcd_set_padding(GtkLCD *lcd, gint val)
 {
     lcd->padding = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
 void gtk_lcd_set_char_height(GtkLCD *lcd, gint val)
 {
     lcd->char_height = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
 void gtk_lcd_set_char_width(GtkLCD *lcd, gint val)
 {
     lcd->char_width = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
 void gtk_lcd_set_dot_width(GtkLCD *lcd, gint val)
 {
     lcd->dot_width = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
 void gtk_lcd_set_sign_width(GtkLCD *lcd, gint val)
 {
     lcd->sign_width = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
 void gtk_lcd_set_space_width(GtkLCD *lcd, gint val)
 {
     lcd->space_width = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
 void gtk_lcd_set_line_thickness(GtkLCD *lcd, gint val)
 {
     lcd->line_thickness = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
 void gtk_lcd_set_fg(GtkLCD *lcd, double red, double green, double blue)
@@ -91,6 +100,7 @@ void gtk_lcd_set_fg(GtkLCD *lcd, double red, double green, double blue)
     lcd->fg.red = red;
     lcd->fg.green = green;
     lcd->fg.blue = blue;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
 void gtk_lcd_set_bg(GtkLCD *lcd, double red, double green, double blue)
@@ -98,6 +108,7 @@ void gtk_lcd_set_bg(GtkLCD *lcd, double red, double green, double blue)
     lcd->bg.red = red;
     lcd->bg.green = green;
     lcd->bg.blue = blue;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
 GtkWidget *gtk_lcd_new(const gchar *format)

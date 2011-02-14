@@ -24,7 +24,6 @@ void double_to_lcd_str(double val, char *lstr)
         p++;
     }
     lstr[9] = 0;
-    printf("%s\n", lstr);
 }
 
 void on_spinbutton_change(GtkSpinButton *spin, GtkLCD *lcd)
@@ -72,7 +71,7 @@ int main(int argc, char *argv[])
     g_signal_connect(G_OBJECT(spin), "value_changed",
                      G_CALLBACK(on_spinbutton_change), lcd);
 
-    on_spinbutton_change(spin, lcd);
+    on_spinbutton_change(GTK_SPIN_BUTTON(spin), GTK_LCD(lcd));
 
     gtk_widget_show_all(window);
     gtk_main();
