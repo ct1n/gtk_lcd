@@ -13,21 +13,7 @@ typedef struct _GtkLCDClass GtkLCDClass;
 struct _GtkLCD {
     GtkWidget widget;
 
-    gint  length;
-    gchar *format;
-    gchar *value;
-
-    gint padding;
-    gint char_height;
-    gint char_width;
-    gint dot_width;
-    gint sign_width;
-    gint space_width;
-    gint line_thickness;
-
-    struct {
-        double red, green, blue;
-    } fg, bg;
+    gpointer priv;
 };
 
 struct _GtkLCDClass {

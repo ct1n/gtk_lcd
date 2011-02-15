@@ -3,6 +3,26 @@
 #include <cairo.h>
 #include "gtk_lcd.h"
 
+struct _GtkLCDPrivate {
+    gint length;
+    gchar *format;
+    gchar *value;
+
+    gint padding;
+    gint char_height;
+    gint char_width;
+    gint dot_width;
+    gint sign_width;
+    gint space_width;
+    gint line_thickness;
+
+    struct {
+        double red, green, blue;
+    } fg, bg;
+};
+
+typedef struct _GtkLCDPrivate GtkLCDPrivate;
+
 static void gtk_lcd_class_init(GtkLCDClass *klass);
 static void gtk_lcd_init(GtkLCD *lcd);
 static void gtk_lcd_size_request(GtkWidget *widget, GtkRequisition *requisition);
@@ -10,105 +30,56 @@ static void gtk_lcd_size_allocate(GtkWidget *widget, GtkAllocation *allocation);
 static void gtk_lcd_realize(GtkWidget *widget);
 static gboolean gtk_lcd_expose(GtkWidget *widget, GdkEventExpose *event);
 static void gtk_lcd_paint(GtkWidget *widget);
-static void gtk_lcd_destroy(GtkObject *object);
+static void gtk_lcd_finalize(GObject *object);
 
+G_DEFINE_TYPE(GtkLCD, gtk_lcd, GTK_TYPE_WIDGET)
 
-GtkType gtk_lcd_get_type(void)
+static void gtk_lcd_class_init(GtkLCDClass *klass)
 {
-	static const GtkTypeInfo gtk_lcd_info = {
-	    "GtkLCD",
-	    sizeof(GtkLCD),
-	    sizeof(GtkLCDClass),
-	    (GtkClassInitFunc) gtk_lcd_class_init,
-	    (GtkObjectInitFunc) gtk_lcd_init,
-	    NULL,
-	    NULL,
-	    (GtkClassInitFunc) NULL
-	};
-    static GtkType gtk_lcd_type = 0;
+    GtkWidgetClass *widget_class;
+    GtkObjectClass *object_class;
+    GObjectClass *gobject_class;
 
+    widget_class = (GtkWidgetClass *) klass;
+    object_class = (GtkObjectClass *) klass;
+    gobject_class = G_OBJECT_CLASS(klass);
 
-    if (!gtk_lcd_type) {
-        gtk_lcd_type = gtk_type_unique(GTK_TYPE_WIDGET, &gtk_lcd_info);
-    }
+    widget_class->realize = gtk_lcd_realize;
+    widget_class->size_request = gtk_lcd_size_request;
+    widget_class->size_allocate = gtk_lcd_size_allocate;
+    widget_class->expose_event = gtk_lcd_expose;
 
+    gobject_class->finalize = gtk_lcd_finalize;
 
-    return gtk_lcd_type;
+    g_type_class_add_private(klass, sizeof(GtkLCDPrivate));
 }
 
-void gtk_lcd_set_format(GtkLCD *lcd, const gchar *format)
+static void gtk_lcd_init(GtkLCD *lcd)
 {
-    g_free(lcd->format);
-    g_free(lcd->value);
-    lcd->format = g_strdup(format);
-    lcd->length = strlen(format);
-    lcd->value = g_strnfill(lcd->length, ' ');
-    gtk_widget_queue_resize(GTK_WIDGET(lcd));
-    gtk_widget_queue_draw(GTK_WIDGET(lcd));
-}
+    GtkLCDPrivate *priv;
 
-void gtk_lcd_set_value(GtkLCD *lcd, const gchar *value)
-{
-    g_strlcpy(lcd->value, value, lcd->length + 1);
-    gtk_widget_queue_draw(GTK_WIDGET(lcd));
-}
+    priv = G_TYPE_INSTANCE_GET_PRIVATE(lcd, gtk_lcd_get_type(), GtkLCDPrivate);
+    lcd->priv = priv;
 
-void gtk_lcd_set_padding(GtkLCD *lcd, gint val)
-{
-    lcd->padding = val;
-    gtk_widget_queue_draw(GTK_WIDGET(lcd));
-}
+    priv->length = 0;
+    priv->format = NULL;
+    priv->value = NULL;
+    
+    priv->padding = 2;
+    priv->char_height = 27;
+    priv->char_width = 12;
+    priv->dot_width = 3;
+    priv->sign_width = 6;
+    priv->space_width = 2;
+    priv->line_thickness = 3;
 
-void gtk_lcd_set_char_height(GtkLCD *lcd, gint val)
-{
-    lcd->char_height = val;
-    gtk_widget_queue_draw(GTK_WIDGET(lcd));
-}
+    priv->fg.red = 0.6;
+    priv->fg.green = 1.0;
+    priv->fg.blue = 0.0;
 
-void gtk_lcd_set_char_width(GtkLCD *lcd, gint val)
-{
-    lcd->char_width = val;
-    gtk_widget_queue_draw(GTK_WIDGET(lcd));
-}
-
-void gtk_lcd_set_dot_width(GtkLCD *lcd, gint val)
-{
-    lcd->dot_width = val;
-    gtk_widget_queue_draw(GTK_WIDGET(lcd));
-}
-
-void gtk_lcd_set_sign_width(GtkLCD *lcd, gint val)
-{
-    lcd->sign_width = val;
-    gtk_widget_queue_draw(GTK_WIDGET(lcd));
-}
-
-void gtk_lcd_set_space_width(GtkLCD *lcd, gint val)
-{
-    lcd->space_width = val;
-    gtk_widget_queue_draw(GTK_WIDGET(lcd));
-}
-
-void gtk_lcd_set_line_thickness(GtkLCD *lcd, gint val)
-{
-    lcd->line_thickness = val;
-    gtk_widget_queue_draw(GTK_WIDGET(lcd));
-}
-
-void gtk_lcd_set_fg(GtkLCD *lcd, double red, double green, double blue)
-{
-    lcd->fg.red = red;
-    lcd->fg.green = green;
-    lcd->fg.blue = blue;
-    gtk_widget_queue_draw(GTK_WIDGET(lcd));
-}
-
-void gtk_lcd_set_bg(GtkLCD *lcd, double red, double green, double blue)
-{
-    lcd->bg.red = red;
-    lcd->bg.green = green;
-    lcd->bg.blue = blue;
-    gtk_widget_queue_draw(GTK_WIDGET(lcd));
+    priv->bg.red = 0.0;
+    priv->bg.green = 0.0;
+    priv->bg.blue = 0.0;
 }
 
 GtkWidget *gtk_lcd_new(const gchar *format)
@@ -123,50 +94,118 @@ GtkWidget *gtk_lcd_new(const gchar *format)
     return GTK_WIDGET(lcd);
 }
 
-static void gtk_lcd_class_init(GtkLCDClass *klass)
+void gtk_lcd_set_format(GtkLCD *lcd, const gchar *format)
 {
-    GtkWidgetClass *widget_class;
-    GtkObjectClass *object_class;
+    GtkLCDPrivate *priv;
 
-    widget_class = (GtkWidgetClass *) klass;
-    object_class = (GtkObjectClass *) klass;
-
-    widget_class->realize = gtk_lcd_realize;
-    widget_class->size_request = gtk_lcd_size_request;
-    widget_class->size_allocate = gtk_lcd_size_allocate;
-    widget_class->expose_event = gtk_lcd_expose;
-
-    object_class->destroy = gtk_lcd_destroy;
+    priv = (GtkLCDPrivate *) lcd->priv;
+    g_free(priv->format);
+    g_free(priv->value);
+    priv->format = g_strdup(format);
+    priv->length = strlen(format);
+    priv->value = g_strnfill(priv->length, ' ');
+    gtk_widget_queue_resize(GTK_WIDGET(lcd));
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
-
-static void gtk_lcd_init(GtkLCD *lcd)
+void gtk_lcd_set_value(GtkLCD *lcd, const gchar *value)
 {
-    lcd->length = 0;
-    lcd->format = NULL;
-    lcd->value = NULL;
-    
-    lcd->padding = 2;
-    lcd->char_height = 27;
-    lcd->char_width = 12;
-    lcd->dot_width = 3;
-    lcd->sign_width = 6;
-    lcd->space_width = 2;
-    lcd->line_thickness = 3;
+    GtkLCDPrivate *priv;
 
-    lcd->fg.red = 0.6;
-    lcd->fg.green = 1.0;
-    lcd->fg.blue = 0.0;
-
-    lcd->bg.red = 0.0;
-    lcd->bg.green = 0.0;
-    lcd->bg.blue = 0.0;
+    priv = (GtkLCDPrivate *) lcd->priv;
+    g_strlcpy(priv->value, value, priv->length + 1);
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
 }
 
+void gtk_lcd_set_padding(GtkLCD *lcd, gint val)
+{
+    GtkLCDPrivate *priv;
+
+    priv = (GtkLCDPrivate *) lcd->priv;
+    priv->padding = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
+}
+
+void gtk_lcd_set_char_height(GtkLCD *lcd, gint val)
+{
+    GtkLCDPrivate *priv;
+
+    priv = (GtkLCDPrivate *) lcd->priv;
+    priv->char_height = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
+}
+
+void gtk_lcd_set_char_width(GtkLCD *lcd, gint val)
+{
+    GtkLCDPrivate *priv;
+
+    priv = (GtkLCDPrivate *) lcd->priv;
+    priv->char_width = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
+}
+
+void gtk_lcd_set_dot_width(GtkLCD *lcd, gint val)
+{
+    GtkLCDPrivate *priv;
+
+    priv = (GtkLCDPrivate *) lcd->priv;
+    priv->dot_width = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
+}
+
+void gtk_lcd_set_sign_width(GtkLCD *lcd, gint val)
+{
+    GtkLCDPrivate *priv;
+
+    priv = (GtkLCDPrivate *) lcd->priv;
+    priv->sign_width = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
+}
+
+void gtk_lcd_set_space_width(GtkLCD *lcd, gint val)
+{
+    GtkLCDPrivate *priv;
+
+    priv = (GtkLCDPrivate *) lcd->priv;
+    priv->space_width = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
+}
+
+void gtk_lcd_set_line_thickness(GtkLCD *lcd, gint val)
+{
+    GtkLCDPrivate *priv;
+
+    priv = (GtkLCDPrivate *) lcd->priv;
+    priv->line_thickness = val;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
+}
+
+void gtk_lcd_set_fg(GtkLCD *lcd, double red, double green, double blue)
+{
+    GtkLCDPrivate *priv;
+
+    priv = (GtkLCDPrivate *) lcd->priv;
+    priv->fg.red = red;
+    priv->fg.green = green;
+    priv->fg.blue = blue;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
+}
+
+void gtk_lcd_set_bg(GtkLCD *lcd, double red, double green, double blue)
+{
+    GtkLCDPrivate *priv;
+
+    priv = (GtkLCDPrivate *) lcd->priv;
+    priv->bg.red = red;
+    priv->bg.green = green;
+    priv->bg.blue = blue;
+    gtk_widget_queue_draw(GTK_WIDGET(lcd));
+}
 
 static void gtk_lcd_size_request(GtkWidget *widget, GtkRequisition *requisition)
 {
     GtkLCD *lcd;
+    GtkLCDPrivate *priv;
     gint width;
     gint height;
     gchar *p;
@@ -176,32 +215,32 @@ static void gtk_lcd_size_request(GtkWidget *widget, GtkRequisition *requisition)
     g_return_if_fail(requisition != NULL);
 
     lcd = GTK_LCD(widget);
+    priv = (GtkLCDPrivate *) lcd->priv;
 
-    width = lcd->padding * 2 + lcd->space_width;
-    height = lcd->padding * 2 + lcd->char_height + lcd->space_width * 2;
+    width = priv->padding * 2 + priv->space_width;
+    height = priv->padding * 2 + priv->char_height + priv->space_width * 2;
 
-    for (p = lcd->format; *p; p++) {
+    for (p = priv->format; *p; p++) {
         switch (*p) {
             case '-':
             case '+':
-                width += lcd->sign_width;
+                width += priv->sign_width;
                 break;
             case '0':
             case ' ':
-                width += lcd->char_width;
+                width += priv->char_width;
                 break;
             case '.':
             case ':':
-                width += lcd->dot_width;
+                width += priv->dot_width;
                 break;
         }
-        width += lcd->space_width;
+        width += priv->space_width;
     }
 
     requisition->width = width;
     requisition->height = height;
 }
-
 
 static void gtk_lcd_size_allocate(GtkWidget *widget, GtkAllocation *allocation)
 {
@@ -249,7 +288,6 @@ static void gtk_lcd_realize(GtkWidget *widget)
 			                 GTK_STATE_NORMAL);
 }
 
-
 static gboolean gtk_lcd_expose(GtkWidget *widget, GdkEventExpose *event)
 {
     g_return_val_if_fail(widget != NULL, FALSE);
@@ -263,19 +301,22 @@ static gboolean gtk_lcd_expose(GtkWidget *widget, GdkEventExpose *event)
 
 static void paint_sign(GtkLCD *lcd, cairo_t *cr, gint offset, gchar ch)
 {
+    GtkLCDPrivate *priv;
     double x, y, len;
+
+    priv = (GtkLCDPrivate *) lcd->priv;
 
     switch (ch) {
         case '-':
-            y = lcd->padding + lcd->space_width;
+            y = priv->padding + priv->space_width;
 
             x = offset;
-            x += ((double) lcd->line_thickness) / 2;
-            y += ((double) lcd->char_height) / 2;
-            len = lcd->sign_width - lcd->line_thickness;
+            x += ((double) priv->line_thickness) / 2;
+            y += ((double) priv->char_height) / 2;
+            len = priv->sign_width - priv->line_thickness;
             cairo_move_to(cr, x, y);
             cairo_line_to(cr, x + len, y);
-            cairo_set_line_width(cr, lcd->line_thickness);
+            cairo_set_line_width(cr, priv->line_thickness);
             cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
             cairo_stroke(cr);
             break;
@@ -284,12 +325,15 @@ static void paint_sign(GtkLCD *lcd, cairo_t *cr, gint offset, gchar ch)
 
 static void paint_digit(GtkLCD *lcd, cairo_t *cr, gint offset, gchar ch)
 {
+    GtkLCDPrivate *priv;
     gint leds[7];
     gint i;
     double half_thick;
     gint line_width;
     gint line_height;
     double x, y, len;
+
+    priv = (GtkLCDPrivate *) lcd->priv;
 
     switch (ch) {
         case ' ': leds[0] = 0; leds[1] = 0; leds[2] = 0; leds[3] = 0; leds[4] = 0; leds[5] = 0; leds[6] = 0; break;
@@ -305,21 +349,21 @@ static void paint_digit(GtkLCD *lcd, cairo_t *cr, gint offset, gchar ch)
         case '9': leds[0] = 1; leds[1] = 1; leds[2] = 1; leds[3] = 1; leds[4] = 0; leds[5] = 1; leds[6] = 1; break;
     }
 
-    cairo_set_line_width(cr, lcd->line_thickness);
+    cairo_set_line_width(cr, priv->line_thickness);
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
-    half_thick = ((double) lcd->line_thickness) / 2;
-    line_width = lcd->char_width - (lcd->line_thickness * 2) - (half_thick * 2);
-    line_height = (lcd->char_height - (lcd->line_thickness * 3) - (half_thick * 4)) / 2;
+    half_thick = ((double) priv->line_thickness) / 2;
+    line_width = priv->char_width - (priv->line_thickness * 2) - (half_thick * 2);
+    line_height = (priv->char_height - (priv->line_thickness * 3) - (half_thick * 4)) / 2;
 
     for (i = 0; i < 7; i++) {
         x = offset;
-        y = lcd->padding + lcd->space_width;
+        y = priv->padding + priv->space_width;
 
         if (leds[i]) {
             switch (i) {
                 case 0:
-                    x += lcd->line_thickness + half_thick;
+                    x += priv->line_thickness + half_thick;
                     y += half_thick;
                     len = line_width;
                     cairo_move_to(cr, x, y);
@@ -328,23 +372,23 @@ static void paint_digit(GtkLCD *lcd, cairo_t *cr, gint offset, gchar ch)
                     break;
                 case 1:
                     x += half_thick;
-                    y += lcd->line_thickness + half_thick;
+                    y += priv->line_thickness + half_thick;
                     len = line_height;
                     cairo_move_to(cr, x, y);
                     cairo_line_to(cr, x, y + len);
                     cairo_stroke(cr);
                     break;
                 case 2:
-                    x += lcd->char_width - half_thick;
-                    y += lcd->line_thickness + half_thick;
+                    x += priv->char_width - half_thick;
+                    y += priv->line_thickness + half_thick;
                     len = line_height;
                     cairo_move_to(cr, x, y);
                     cairo_line_to(cr, x, y + len);
                     cairo_stroke(cr);
                     break;
                 case 3:
-                    x += lcd->line_thickness + half_thick;
-                    y += line_height + lcd->line_thickness + (half_thick * 2) + half_thick;
+                    x += priv->line_thickness + half_thick;
+                    y += line_height + priv->line_thickness + (half_thick * 2) + half_thick;
                     len = line_width;
                     cairo_move_to(cr, x, y);
                     cairo_line_to(cr, x + len, y);
@@ -352,23 +396,23 @@ static void paint_digit(GtkLCD *lcd, cairo_t *cr, gint offset, gchar ch)
                     break;
                 case 4:
                     x += half_thick;
-                    y += line_height + (lcd->line_thickness * 2) + (half_thick * 2) + half_thick;
+                    y += line_height + (priv->line_thickness * 2) + (half_thick * 2) + half_thick;
                     len = line_height;
                     cairo_move_to(cr, x, y);
                     cairo_line_to(cr, x, y + len);
                     cairo_stroke(cr);
                     break;
                 case 5:
-                    x += lcd->char_width - half_thick;
-                    y += line_height + (lcd->line_thickness * 2) + (half_thick * 2) + half_thick;
+                    x += priv->char_width - half_thick;
+                    y += line_height + (priv->line_thickness * 2) + (half_thick * 2) + half_thick;
                     len = line_height;
                     cairo_move_to(cr, x, y);
                     cairo_line_to(cr, x, y + len);
                     cairo_stroke(cr);
                     break;
                 case 6:
-                    x += lcd->line_thickness + half_thick;
-                    y += lcd->char_height - half_thick;
+                    x += priv->line_thickness + half_thick;
+                    y += priv->char_height - half_thick;
                     len = line_width;
                     cairo_move_to(cr, x, y);
                     cairo_line_to(cr, x + len, y);
@@ -381,24 +425,27 @@ static void paint_digit(GtkLCD *lcd, cairo_t *cr, gint offset, gchar ch)
 
 static void paint_separator(GtkLCD *lcd, cairo_t *cr, gint offset, gchar ch)
 {
+    GtkLCDPrivate *priv;
     double x, y, len;
     double half_thick;
     double dist;
 
-    half_thick = ((double) lcd->dot_width) / 2;
-    dist = ((double) lcd->char_height) / 6;
+    priv = (GtkLCDPrivate *) lcd->priv;
 
-    cairo_set_line_width(cr, lcd->dot_width);
+    half_thick = ((double) priv->dot_width) / 2;
+    dist = ((double) priv->char_height) / 6;
+
+    cairo_set_line_width(cr, priv->dot_width);
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
     x = offset + half_thick;
-    y = lcd->padding + lcd->space_width;
+    y = priv->padding + priv->space_width;
 
     switch (ch) {
         case ':':
-            y += ((double) lcd->char_height) / 2;
+            y += ((double) priv->char_height) / 2;
 
-            len = lcd->dot_width;
+            len = priv->dot_width;
             y -= (dist / 2) + half_thick + len;
 
             cairo_move_to(cr, x, y);
@@ -413,7 +460,7 @@ static void paint_separator(GtkLCD *lcd, cairo_t *cr, gint offset, gchar ch)
             cairo_stroke(cr);
             break;
         case '.':
-            y += lcd->char_height - half_thick;
+            y += priv->char_height - half_thick;
 
             cairo_move_to(cr, x, y);
             cairo_line_to(cr, x, y);
@@ -425,6 +472,7 @@ static void paint_separator(GtkLCD *lcd, cairo_t *cr, gint offset, gchar ch)
 static void gtk_lcd_paint(GtkWidget *widget)
 {
     GtkLCD *lcd;
+    GtkLCDPrivate *priv;
     cairo_t *cr;
     gint offset;
     gint i;
@@ -434,31 +482,32 @@ static void gtk_lcd_paint(GtkWidget *widget)
     }
 
     lcd = GTK_LCD(widget);
+    priv = (GtkLCDPrivate *) lcd->priv;
 
     cr = gdk_cairo_create(widget->window);
 
-    cairo_set_source_rgb(cr, lcd->bg.red, lcd->bg.green, lcd->bg.blue);
+    cairo_set_source_rgb(cr, priv->bg.red, priv->bg.green, priv->bg.blue);
     cairo_paint(cr);
 
-    cairo_set_source_rgb(cr, lcd->fg.red, lcd->fg.green, lcd->fg.blue);
+    cairo_set_source_rgb(cr, priv->fg.red, priv->fg.green, priv->fg.blue);
 
-    offset = lcd->padding + lcd->space_width;
+    offset = priv->padding + priv->space_width;
 
-    for (i = 0; lcd->format[i]; i++) {
-        switch (lcd->format[i]) {
+    for (i = 0; priv->format[i]; i++) {
+        switch (priv->format[i]) {
             case '-':
-                paint_sign(lcd, cr, offset, lcd->value[i]);
-                offset += lcd->sign_width + lcd->space_width;
+                paint_sign(lcd, cr, offset, priv->value[i]);
+                offset += priv->sign_width + priv->space_width;
                 break;
             case ' ':
             case '0': case '1': case '2': case '3': case '4':
             case '5': case '6': case '7': case '8': case '9':
-                paint_digit(lcd, cr, offset, lcd->value[i]);
-                offset += lcd->char_width + lcd->space_width;
+                paint_digit(lcd, cr, offset, priv->value[i]);
+                offset += priv->char_width + priv->space_width;
                 break;
             case '.': case ':':
-                paint_separator(lcd, cr, offset, lcd->value[i]);
-                offset += lcd->dot_width + lcd->space_width;
+                paint_separator(lcd, cr, offset, priv->value[i]);
+                offset += priv->dot_width + priv->space_width;
                 break;
         }
     }
@@ -466,25 +515,21 @@ static void gtk_lcd_paint(GtkWidget *widget)
     cairo_destroy(cr);
 }
 
-static void gtk_lcd_destroy(GtkObject *object)
+static void gtk_lcd_finalize(GObject *object)
 {
     GtkLCD *lcd;
+    GtkLCDPrivate *priv;
     GtkLCDClass *klass;
 
     g_return_if_fail(object != NULL);
     g_return_if_fail(GTK_IS_LCD(object));
 
     lcd = GTK_LCD(object);
+    priv = (GtkLCDPrivate *) lcd->priv;
 
-    g_free(lcd->format);
-    lcd->format = NULL;
-    g_free(lcd->value);
-    lcd->value = NULL;
+    g_free(priv->format);
+    g_free(priv->value);
 
-    klass = gtk_type_class(gtk_widget_get_type());
-
-    if (GTK_OBJECT_CLASS(klass)->destroy) {
-        (*GTK_OBJECT_CLASS(klass)->destroy) (object);
-    }
+    G_OBJECT_CLASS(gtk_lcd_parent_class)->finalize(object);
 }
 
